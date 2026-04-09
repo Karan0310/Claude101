@@ -2,6 +2,7 @@
 Job Searcher - Searches for jobs using SerpAPI (Google Jobs), LinkedIn, and Indeed.
 Falls back gracefully if API keys are not configured.
 """
+import re
 import uuid
 import json
 from typing import List, Optional
@@ -151,6 +152,50 @@ async def search_indeed_jobs(
     return jobs
 
 
+# ─── Remotive (free, no API key required) ────────────────────────────────────
+
+async def search_remotive_jobs(
+    query: str,
+    num_results: int = 10,
+) -> List[JobListing]:
+    """Search real remote jobs via Remotive API — completely free, no auth needed."""
+    params = {"search": query, "limit": num_results}
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                "https://remotive.com/api/remote-jobs",
+                params=params,
+                headers={"Accept": "application/json"},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        return []
+
+    jobs = []
+    for item in data.get("jobs", [])[:num_results]:
+        # Strip HTML tags from description
+        raw_desc = item.get("description", "") or ""
+        clean_desc = re.sub(r"<[^>]+>", " ", raw_desc)
+        clean_desc = re.sub(r"\s+", " ", clean_desc).strip()[:1500]
+
+        jobs.append(
+            JobListing(
+                id=str(uuid.uuid4()),
+                title=item.get("title", "Unknown Title"),
+                company=item.get("company_name", "Unknown Company"),
+                location=item.get("candidate_required_location") or "Remote",
+                description=clean_desc,
+                salary_range=item.get("salary") or None,
+                apply_url=item.get("url"),
+                source=JobSource.REMOTIVE,
+                posted_date=item.get("publication_date", "")[:10] if item.get("publication_date") else None,
+            )
+        )
+    return jobs
+
+
 # ─── Orchestrated multi-source search ────────────────────────────────────────
 
 def _build_search_queries(profile: ResumeProfile, request: SearchRequest) -> List[str]:
@@ -218,7 +263,19 @@ async def search_all_jobs(
             unique_jobs.append(job)
 
     if not unique_jobs:
-        # Return mock jobs as demo when no API keys are configured
+        # Try free Remotive API (no key needed) before falling back to demo
+        for query in queries[:2]:
+            remotive_jobs = await search_remotive_jobs(query, request.max_results)
+            for job in remotive_jobs:
+                key = (job.title.lower().strip(), job.company.lower().strip())
+                if key not in seen_titles_companies:
+                    seen_titles_companies.add(key)
+                    unique_jobs.append(job)
+            if unique_jobs:
+                break
+
+    if not unique_jobs:
+        # Final fallback: clearly-labeled demo jobs
         unique_jobs = _generate_demo_jobs(profile)
 
     return unique_jobs[: request.max_results]
@@ -257,7 +314,7 @@ def _generate_demo_jobs(profile: ResumeProfile) -> List[JobListing]:
                 requirements=f"3+ years of experience. Skills: {skills_str}",
                 salary_range="$80,000 - $140,000",
                 apply_url=url,
-                source=JobSource.GOOGLE,
+                source=JobSource.DEMO,
                 posted_date="2 days ago",
             )
         )

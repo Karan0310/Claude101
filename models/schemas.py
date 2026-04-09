@@ -9,6 +9,8 @@ class JobSource(str, Enum):
     LINKEDIN = "linkedin"
     INDEED = "indeed"
     GLASSDOOR = "glassdoor"
+    REMOTIVE = "remotive"
+    DEMO = "demo"
 
 
 class JobType(str, Enum):

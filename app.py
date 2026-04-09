@@ -188,21 +188,60 @@ async def submit_feedback(
 @app.get("/evaluate/{session_id}")
 async def get_evaluation(session_id: str, db: AsyncSession = Depends(get_db)):
     """Run and return the feedback loop evaluation for a session."""
+    from agent.feedback_loop import evaluate_recommendations, format_evaluation_report
+    from models.schemas import JobMatch, JobListing, JobSource, UserFeedback, FeedbackRating
+
     agent = _agents.get(session_id)
-    if not agent:
-        # Try to reconstruct from DB
+
+    if agent:
+        evaluation = await agent.evaluate()
+        report = await agent.get_evaluation_report()
+    else:
+        # Reconstruct from DB
         record = await get_session(db, session_id)
         if not record:
             raise HTTPException(status_code=404, detail="Session not found")
-        return JSONResponse(
-            content={
-                "error": "Agent session expired. Please re-upload your resume for fresh evaluation.",
-                "tip": "Evaluation requires the active agent session to be in memory.",
-            }
-        )
 
-    evaluation = await agent.evaluate()
-    report = await agent.get_evaluation_report()
+        # Load resume profile
+        profile_data = json.loads(record.resume_profile_json)
+        skills = profile_data.get("skills", [])
+        experience_years = profile_data.get("experience_years")
+        target_roles = profile_data.get("preferred_roles", [])
+
+        # Load job matches
+        matches_data = json.loads(record.job_matches_json)
+        job_matches = []
+        for m in matches_data:
+            try:
+                job_matches.append(JobMatch(**m))
+            except Exception:
+                pass
+
+        # Load feedback from DB
+        fb_records = await get_session_feedback(db, session_id)
+        feedback_list = []
+        for fb in fb_records:
+            try:
+                feedback_list.append(UserFeedback(
+                    job_id=fb.job_id,
+                    job_title=fb.job_title,
+                    company=fb.company,
+                    rating=FeedbackRating(fb.rating),
+                    applied=fb.applied,
+                    notes=fb.notes,
+                    predicted_fit=fb.predicted_fit,
+                ))
+            except Exception:
+                pass
+
+        evaluation = await evaluate_recommendations(
+            feedback_list=feedback_list,
+            job_matches=job_matches,
+            skills=skills,
+            experience_years=experience_years,
+            target_roles=target_roles,
+        )
+        report = format_evaluation_report(evaluation)
 
     # Persist evaluation
     await save_evaluation(

@@ -20,7 +20,7 @@ export interface JobListing {
   requirements?: string;
   salaryRange?: string;
   applyUrl?: string;
-  source: 'google' | 'linkedin' | 'indeed' | 'demo';
+  source: 'google' | 'linkedin' | 'indeed' | 'remotive' | 'demo';
   postedDate?: string;
 }
 

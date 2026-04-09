@@ -33,7 +33,31 @@ async function searchGoogleJobs(
   }));
 }
 
-// ── Demo Jobs (no API key needed) ─────────────────────────────────────────────
+// ── Remotive (free, no API key required) ─────────────────────────────────────
+
+async function searchRemotiveJobs(query: string, num = 10): Promise<JobListing[]> {
+  try {
+    const { data } = await axios.get('https://remotive.com/api/remote-jobs', {
+      params: { search: query, limit: num },
+      timeout: 15000,
+    });
+    return (data.jobs || []).slice(0, num).map((item: any) => ({
+      id: Math.random().toString(36).slice(2),
+      title: item.title || 'Unknown Title',
+      company: item.company_name || 'Unknown Company',
+      location: item.candidate_required_location || 'Remote',
+      description: (item.description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500),
+      salaryRange: item.salary || undefined,
+      applyUrl: item.url || undefined,
+      source: 'remotive' as const,
+      postedDate: item.publication_date ? item.publication_date.slice(0, 10) : undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ── Demo Jobs (final fallback) ────────────────────────────────────────────────
 
 function generateDemoJobs(profile: ResumeProfile, num: number): JobListing[] {
   const role = profile.preferredRoles[0] || 'Software Engineer';
@@ -76,6 +100,7 @@ export async function searchJobs(
   const seen = new Set<string>();
   const all: JobListing[] = [];
 
+  // Try SerpAPI (Google Jobs) if key provided
   for (const query of queries) {
     const searchQuery = options.remoteOk ? `${query} remote` : query;
     const jobs = await searchGoogleJobs(serpapiKey, searchQuery, location, Math.ceil(options.maxResults / queries.length));
@@ -85,6 +110,19 @@ export async function searchJobs(
     }
   }
 
+  // Try free Remotive API if no paid results
+  if (all.length === 0) {
+    for (const query of queries.slice(0, 2)) {
+      const jobs = await searchRemotiveJobs(query, options.maxResults);
+      for (const job of jobs) {
+        const key = `${job.title.toLowerCase()}|${job.company.toLowerCase()}`;
+        if (!seen.has(key)) { seen.add(key); all.push(job); }
+      }
+      if (all.length > 0) break;
+    }
+  }
+
+  // Final fallback: demo jobs
   if (all.length === 0) return generateDemoJobs(profile, options.maxResults);
   return all.slice(0, options.maxResults);
 }

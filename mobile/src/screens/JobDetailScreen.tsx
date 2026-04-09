@@ -120,6 +120,8 @@ export default function JobDetailScreen() {
           <Text style={styles.noApplyText}>
             {job.source === 'demo'
               ? 'Add a SerpAPI key in Settings for real job listings with apply links.'
+              : job.source === 'remotive'
+              ? 'Visit remotive.com to find and apply to this position.'
               : 'No direct apply link available — search for this role on the company website.'}
           </Text>
         </View>
