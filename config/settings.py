@@ -10,11 +10,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(..., env="ANTHROPIC_API_KEY")
     claude_model: str = Field(default="claude-sonnet-4-6", env="CLAUDE_MODEL")
 
-    # SerpAPI (Google Jobs)
+    # SerpAPI (Google Jobs + Indeed)
     serpapi_key: Optional[str] = Field(default=None, env="SERPAPI_KEY")
 
     # RapidAPI (LinkedIn Jobs)
     rapidapi_key: Optional[str] = Field(default=None, env="RAPIDAPI_KEY")
+
+    # Adzuna (millions of jobs globally, free tier)
+    adzuna_app_id: Optional[str] = Field(default=None, env="ADZUNA_APP_ID")
+    adzuna_app_key: Optional[str] = Field(default=None, env="ADZUNA_APP_KEY")
 
     # App
     app_host: str = Field(default="0.0.0.0", env="APP_HOST")

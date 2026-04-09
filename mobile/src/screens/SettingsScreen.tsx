@@ -52,6 +52,7 @@ function Field({ label, value, placeholder, onChangeText, secure, hint }: FieldP
 export default function SettingsScreen() {
   const [settings, setSettings] = useState<AppSettings>({
     anthropicApiKey: '', serpapiKey: '', rapidApiKey: '',
+    adzunaAppId: '', adzunaAppKey: '',
     defaultLocation: '', maxResults: 10, remoteOk: true,
   });
   const [saving, setSaving] = useState(false);
@@ -93,7 +94,25 @@ export default function SettingsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>🔍 Job Search APIs</Text>
-        <Text style={styles.sectionNote}>Optional. Without these, demo job listings are used.</Text>
+        <Text style={styles.sectionNote}>
+          Real jobs load automatically via Remotive, Arbeitnow & Himalayas (no key needed).
+          Add keys below for millions more listings.
+        </Text>
+        <Field
+          label="Adzuna App ID"
+          value={settings.adzunaAppId}
+          placeholder="Your Adzuna App ID"
+          onChangeText={set('adzunaAppId')}
+          hint="Millions of real jobs globally. Free at developer.adzuna.com"
+        />
+        <Field
+          label="Adzuna App Key"
+          value={settings.adzunaAppKey}
+          placeholder="Your Adzuna App Key"
+          onChangeText={set('adzunaAppKey')}
+          secure
+          hint="Pair with App ID above (1,000 free calls/day)"
+        />
         <Field
           label="SerpAPI Key"
           value={settings.serpapiKey}

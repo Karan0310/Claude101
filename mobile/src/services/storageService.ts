@@ -7,6 +7,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   serpapiKey: '',
   rapidApiKey: '',
+  adzunaAppId: '',
+  adzunaAppKey: '',
   defaultLocation: '',
   maxResults: 10,
   remoteOk: true,

@@ -37,6 +37,8 @@ export interface AppSettings {
   anthropicApiKey: string;
   serpapiKey: string;
   rapidApiKey: string;
+  adzunaAppId: string;
+  adzunaAppKey: string;
   defaultLocation: string;
   maxResults: number;
   remoteOk: boolean;

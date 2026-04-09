@@ -1,6 +1,88 @@
 import axios from 'axios';
 import { JobListing, ResumeProfile } from '../types';
 
+// ── Adzuna (free API key, millions of real jobs) ──────────────────────────────
+
+async function searchAdzunaJobs(
+  appId: string,
+  appKey: string,
+  query: string,
+  location?: string,
+  num = 10
+): Promise<JobListing[]> {
+  if (!appId || !appKey) return [];
+  const params: Record<string, string> = {
+    app_id: appId,
+    app_key: appKey,
+    results_per_page: String(Math.min(num, 50)),
+    what: query,
+    'content-type': 'application/json',
+  };
+  if (location) params.where = location;
+  try {
+    const { data } = await axios.get('https://api.adzuna.com/v1/api/jobs/us/search/1', { params, timeout: 20000 });
+    return (data.results || []).slice(0, num).map((item: any) => {
+      const salMin = item.salary_min, salMax = item.salary_max;
+      const salary = salMin && salMax ? `$${Math.round(salMin).toLocaleString()} – $${Math.round(salMax).toLocaleString()}`
+        : salMin ? `$${Math.round(salMin).toLocaleString()}+` : undefined;
+      return {
+        id: Math.random().toString(36).slice(2),
+        title: item.title || 'Unknown Title',
+        company: item.company?.display_name || 'Unknown Company',
+        location: item.location?.display_name,
+        description: item.description,
+        salaryRange: salary,
+        applyUrl: item.redirect_url,
+        source: 'google' as const,
+        postedDate: item.created?.slice(0, 10),
+      };
+    });
+  } catch { return []; }
+}
+
+// ── Arbeitnow (free, no key, EU + remote tech jobs) ───────────────────────────
+
+async function searchArbeitnowJobs(query: string, num = 10): Promise<JobListing[]> {
+  try {
+    const { data } = await axios.get('https://www.arbeitnow.com/api/job-board-api', {
+      params: { search: query },
+      timeout: 15000,
+    });
+    return (data.data || []).slice(0, num).map((item: any) => ({
+      id: Math.random().toString(36).slice(2),
+      title: item.title || 'Unknown Title',
+      company: item.company_name || 'Unknown Company',
+      location: item.location || (item.remote ? 'Remote' : undefined),
+      description: (item.description || '').slice(0, 1500),
+      applyUrl: item.url,
+      source: 'remotive' as const,
+      postedDate: String(item.published_at || '').slice(0, 10) || undefined,
+    }));
+  } catch { return []; }
+}
+
+// ── Himalayas (free, no key, remote tech jobs) ────────────────────────────────
+
+async function searchHimalayasJobs(query: string, num = 10): Promise<JobListing[]> {
+  try {
+    const { data } = await axios.get('https://himalayas.app/jobs/api', {
+      params: { q: query, limit: num },
+      timeout: 15000,
+    });
+    return (data.jobs || []).slice(0, num).map((item: any) => ({
+      id: Math.random().toString(36).slice(2),
+      title: item.title || 'Unknown Title',
+      company: item.companyName || 'Unknown Company',
+      location: item.locationRestrictions || 'Remote',
+      description: (item.description || '').slice(0, 1500),
+      salaryRange: item.salary,
+      applyUrl: item.applicationLink || item.url,
+      source: 'remotive' as const,
+      postedDate: item.publishedAt?.slice(0, 10),
+    }));
+  } catch { return []; }
+}
+
 // ── Google Jobs via SerpAPI ───────────────────────────────────────────────────
 
 async function searchGoogleJobs(
@@ -93,36 +175,45 @@ function buildQueries(profile: ResumeProfile, extraKeywords: string[]): string[]
 export async function searchJobs(
   serpapiKey: string,
   profile: ResumeProfile,
-  options: { location?: string; maxResults: number; remoteOk: boolean; extraKeywords?: string[] }
+  options: {
+    location?: string; maxResults: number; remoteOk: boolean;
+    extraKeywords?: string[];
+    adzunaAppId?: string; adzunaAppKey?: string;
+  }
 ): Promise<JobListing[]> {
   const queries = buildQueries(profile, options.extraKeywords || []);
+  const primaryQuery = queries[0] || 'software engineer';
   const location = options.location || profile.location;
   const seen = new Set<string>();
   const all: JobListing[] = [];
 
-  // Try SerpAPI (Google Jobs) if key provided
-  for (const query of queries) {
-    const searchQuery = options.remoteOk ? `${query} remote` : query;
-    const jobs = await searchGoogleJobs(serpapiKey, searchQuery, location, Math.ceil(options.maxResults / queries.length));
+  function addUnique(jobs: JobListing[]) {
     for (const job of jobs) {
       const key = `${job.title.toLowerCase()}|${job.company.toLowerCase()}`;
       if (!seen.has(key)) { seen.add(key); all.push(job); }
     }
   }
 
-  // Try free Remotive API if no paid results
-  if (all.length === 0) {
+  const perQuery = Math.ceil(options.maxResults / Math.max(queries.length, 1));
+
+  // Tier 1: paid SerpAPI (Google Jobs)
+  for (const query of queries) {
+    const q = options.remoteOk ? `${query} remote` : query;
+    addUnique(await searchGoogleJobs(serpapiKey, q, location, perQuery));
+  }
+
+  // Tier 2: Adzuna (free key, broad global coverage)
+  if (options.adzunaAppId && options.adzunaAppKey) {
     for (const query of queries.slice(0, 2)) {
-      const jobs = await searchRemotiveJobs(query, options.maxResults);
-      for (const job of jobs) {
-        const key = `${job.title.toLowerCase()}|${job.company.toLowerCase()}`;
-        if (!seen.has(key)) { seen.add(key); all.push(job); }
-      }
-      if (all.length > 0) break;
+      addUnique(await searchAdzunaJobs(options.adzunaAppId, options.adzunaAppKey, query, location, perQuery));
     }
   }
 
-  // Final fallback: demo jobs
+  // Tier 3: free no-key sources (always run to enrich results)
+  addUnique(await searchRemotiveJobs(primaryQuery, options.maxResults));
+  addUnique(await searchArbeitnowJobs(primaryQuery, options.maxResults));
+  addUnique(await searchHimalayasJobs(primaryQuery, options.maxResults));
+
   if (all.length === 0) return generateDemoJobs(profile, options.maxResults);
   return all.slice(0, options.maxResults);
 }

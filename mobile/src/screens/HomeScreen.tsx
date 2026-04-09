@@ -93,6 +93,8 @@ export default function HomeScreen() {
         maxResults: settings.maxResults,
         remoteOk: settings.remoteOk,
         extraKeywords,
+        adzunaAppId: settings.adzunaAppId,
+        adzunaAppKey: settings.adzunaAppKey,
       });
       updateStep(1, true, false);
 

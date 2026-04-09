@@ -152,6 +152,136 @@ async def search_indeed_jobs(
     return jobs
 
 
+# ─── Adzuna (free API key, millions of real jobs globally) ───────────────────
+
+async def search_adzuna_jobs(
+    query: str,
+    location: Optional[str] = None,
+    num_results: int = 10,
+    country: str = "us",
+) -> List[JobListing]:
+    """Search Adzuna jobs — free tier: 1,000 calls/day. Register at developer.adzuna.com"""
+    if not settings.adzuna_app_id or not settings.adzuna_app_key:
+        return []
+
+    params = {
+        "app_id": settings.adzuna_app_id,
+        "app_key": settings.adzuna_app_key,
+        "results_per_page": min(num_results, 50),
+        "what": query,
+        "content-type": "application/json",
+    }
+    if location:
+        params["where"] = location
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                f"https://api.adzuna.com/v1/api/jobs/{country}/search/1",
+                params=params,
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        return []
+
+    jobs = []
+    for item in data.get("results", [])[:num_results]:
+        salary = None
+        sal_min = item.get("salary_min")
+        sal_max = item.get("salary_max")
+        if sal_min and sal_max:
+            salary = f"${int(sal_min):,} – ${int(sal_max):,}"
+        elif sal_min:
+            salary = f"${int(sal_min):,}+"
+
+        jobs.append(
+            JobListing(
+                id=str(uuid.uuid4()),
+                title=item.get("title", "Unknown Title"),
+                company=item.get("company", {}).get("display_name", "Unknown Company"),
+                location=item.get("location", {}).get("display_name"),
+                description=item.get("description"),
+                salary_range=salary,
+                apply_url=item.get("redirect_url"),
+                source=JobSource.GOOGLE,  # closest enum; Adzuna aggregates all sources
+                posted_date=item.get("created", "")[:10] if item.get("created") else None,
+            )
+        )
+    return jobs
+
+
+# ─── Arbeitnow (free, no API key, EU + remote tech jobs) ─────────────────────
+
+async def search_arbeitnow_jobs(
+    query: str,
+    num_results: int = 10,
+) -> List[JobListing]:
+    """Search Arbeitnow — completely free, no auth, tech jobs EU + remote."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                "https://www.arbeitnow.com/api/job-board-api",
+                params={"search": query},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        return []
+
+    jobs = []
+    for item in data.get("data", [])[:num_results]:
+        jobs.append(
+            JobListing(
+                id=str(uuid.uuid4()),
+                title=item.get("title", "Unknown Title"),
+                company=item.get("company_name", "Unknown Company"),
+                location=item.get("location") or ("Remote" if item.get("remote") else None),
+                description=item.get("description", "")[:1500],
+                apply_url=item.get("url"),
+                source=JobSource.REMOTIVE,  # reuse as "free board" source
+                posted_date=str(item.get("published_at", ""))[:10] or None,
+            )
+        )
+    return jobs
+
+
+# ─── Himalayas (free, no API key, remote tech jobs) ───────────────────────────
+
+async def search_himalayas_jobs(
+    query: str,
+    num_results: int = 10,
+) -> List[JobListing]:
+    """Search Himalayas remote jobs — completely free, no auth."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                "https://himalayas.app/jobs/api",
+                params={"q": query, "limit": num_results},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        return []
+
+    jobs = []
+    for item in data.get("jobs", [])[:num_results]:
+        jobs.append(
+            JobListing(
+                id=str(uuid.uuid4()),
+                title=item.get("title", "Unknown Title"),
+                company=item.get("companyName", "Unknown Company"),
+                location=item.get("locationRestrictions") or "Remote",
+                description=item.get("description", "")[:1500],
+                salary_range=item.get("salary"),
+                apply_url=item.get("applicationLink") or item.get("url"),
+                source=JobSource.REMOTIVE,
+                posted_date=item.get("publishedAt", "")[:10] if item.get("publishedAt") else None,
+            )
+        )
+    return jobs
+
+
 # ─── Remotive (free, no API key required) ────────────────────────────────────
 
 async def search_remotive_jobs(
@@ -233,52 +363,43 @@ async def search_all_jobs(
 ) -> List[JobListing]:
     """
     Search across all configured job sources and return deduplicated results.
+    Priority: SerpAPI/LinkedIn (paid) → Adzuna (free key) → Remotive/Arbeitnow/Himalayas (free) → demo
     """
     queries = _build_search_queries(profile, request)
     location = request.location or profile.location
     all_jobs: List[JobListing] = []
     seen_titles_companies = set()
 
-    per_query = max(3, request.max_results // len(queries)) if queries else request.max_results
+    def _add_unique(jobs: List[JobListing]):
+        for job in jobs:
+            key = (job.title.lower().strip(), job.company.lower().strip())
+            if key not in seen_titles_companies:
+                seen_titles_companies.add(key)
+                all_jobs.append(job)
 
+    per_query = max(3, request.max_results // max(len(queries), 1))
+
+    # ── Tier 1: paid API sources ──────────────────────────────────────────────
     for query in queries:
-        # Google Jobs (primary)
-        google_jobs = await search_google_jobs(query, location, per_query)
-        all_jobs.extend(google_jobs)
+        _add_unique(await search_google_jobs(query, location, per_query))
+        _add_unique(await search_linkedin_jobs(query, location, per_query))
+        _add_unique(await search_indeed_jobs(query, location, per_query))
 
-        # LinkedIn
-        linkedin_jobs = await search_linkedin_jobs(query, location, per_query)
-        all_jobs.extend(linkedin_jobs)
-
-        # Indeed (via SerpAPI)
-        indeed_jobs = await search_indeed_jobs(query, location, per_query)
-        all_jobs.extend(indeed_jobs)
-
-    # Deduplicate by (title, company)
-    unique_jobs = []
-    for job in all_jobs:
-        key = (job.title.lower().strip(), job.company.lower().strip())
-        if key not in seen_titles_companies:
-            seen_titles_companies.add(key)
-            unique_jobs.append(job)
-
-    if not unique_jobs:
-        # Try free Remotive API (no key needed) before falling back to demo
+    # ── Tier 2: Adzuna (free key, broad global coverage) ─────────────────────
+    if settings.adzuna_app_id and settings.adzuna_app_key:
         for query in queries[:2]:
-            remotive_jobs = await search_remotive_jobs(query, request.max_results)
-            for job in remotive_jobs:
-                key = (job.title.lower().strip(), job.company.lower().strip())
-                if key not in seen_titles_companies:
-                    seen_titles_companies.add(key)
-                    unique_jobs.append(job)
-            if unique_jobs:
-                break
+            _add_unique(await search_adzuna_jobs(query, location, per_query))
 
-    if not unique_jobs:
-        # Final fallback: clearly-labeled demo jobs
-        unique_jobs = _generate_demo_jobs(profile)
+    # ── Tier 3: free no-key sources (always run to enrich results) ───────────
+    primary_query = queries[0] if queries else "software engineer"
+    _add_unique(await search_remotive_jobs(primary_query, request.max_results))
+    _add_unique(await search_arbeitnow_jobs(primary_query, request.max_results))
+    _add_unique(await search_himalayas_jobs(primary_query, request.max_results))
 
-    return unique_jobs[: request.max_results]
+    if not all_jobs:
+        all_jobs = _generate_demo_jobs(profile)
+
+    return all_jobs[: request.max_results]
 
 
 def _generate_demo_jobs(profile: ResumeProfile) -> List[JobListing]:
