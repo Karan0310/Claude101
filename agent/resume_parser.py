@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Union
 
 import anthropic
-import pdfplumber
+import PyPDF2
 from docx import Document
 
 from config.settings import settings
@@ -16,13 +16,13 @@ from models.schemas import ResumeProfile
 
 
 def extract_text_from_pdf(file_content: bytes) -> str:
-    """Extract text from PDF bytes using pdfplumber."""
+    """Extract text from PDF bytes using PyPDF2."""
     text_parts = []
-    with pdfplumber.open(io.BytesIO(file_content)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text_parts.append(page_text)
+    reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+    for page in reader.pages:
+        page_text = page.extract_text()
+        if page_text:
+            text_parts.append(page_text)
     return "\n\n".join(text_parts)
 
 
