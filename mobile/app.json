@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Resume Job Matcher",
+    "slug": "resume-job-matcher",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.resumejobmatcher.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.resumejobmatcher.app",
+      "permissions": ["READ_EXTERNAL_STORAGE"]
+    },
+    "plugins": [
+      "expo-document-picker",
+      "expo-secure-store"
+    ]
+  }
+}
