@@ -193,9 +193,10 @@ def _interactive_feedback(agent: ResumeJobMatcherAgent, matches):
 def web(host, port, reload):
     """Start the web server."""
     import uvicorn
+    display_host = "localhost" if host == "0.0.0.0" else host
     console.print(Panel.fit(
         f"[bold cyan]Starting Resume-Job Matcher Web App[/bold cyan]\n"
-        f"Open [link]http://{host}:{port}[/link] in your browser",
+        f"Open [bold]http://{display_host}:{port}[/bold] in your browser",
         border_style="cyan",
     ))
     uvicorn.run("app:app", host=host, port=port, reload=reload)
