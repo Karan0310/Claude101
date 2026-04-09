@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Matches · Resume-Job Matcher</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <a href="/" class="back-link">← New Search</a>
+      <h1>Your Job Matches</h1>
+      {% if profile.name %}
+      <p class="subtitle">Results for <strong>{{ profile.name }}</strong> · Session {{ session_id[:8] }}</p>
+      {% endif %}
+    </header>
+
+    <!-- Profile Summary -->
+    <div class="card profile-summary">
+      <h2>Resume Profile</h2>
+      <div class="profile-grid">
+        <div>
+          <strong>Skills</strong>
+          <div class="tags">
+            {% for skill in profile.skills[:12] %}
+            <span class="tag">{{ skill }}</span>
+            {% endfor %}
+            {% if profile.skills|length > 12 %}
+            <span class="tag muted">+{{ profile.skills|length - 12 }} more</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="profile-meta">
+          {% if profile.experience_years %}<p><strong>Experience:</strong> {{ profile.experience_years }} years</p>{% endif %}
+          {% if profile.location %}<p><strong>Location:</strong> {{ profile.location }}</p>{% endif %}
+          {% if profile.education %}<p><strong>Education:</strong> {{ profile.education[0] }}</p>{% endif %}
+        </div>
+      </div>
+      {% if profile.preferred_roles %}
+      <div class="preferred-roles">
+        <strong>Best-fit roles:</strong>
+        {% for role in profile.preferred_roles[:5] %}
+        <span class="tag role-tag">{{ role }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Job Matches -->
+    <div class="matches-header">
+      <h2>{{ matches|length }} Job Matches — Ranked by Fit</h2>
+      <button class="btn btn-secondary" id="evaluate-btn" onclick="runEvaluation()">
+        View AI Evaluation Report
+      </button>
+    </div>
+
+    <div class="job-list" id="job-list">
+      {% for match in matches %}
+      {% set job = match.job %}
+      {% set score = match.fit_score | int %}
+      {% set color = '#22c55e' if score >= 70 else '#f59e0b' if score >= 50 else '#ef4444' %}
+      {% set label = 'Excellent Match' if score >= 85 else 'Good Match' if score >= 70 else 'Partial Match' if score >= 50 else 'Stretch Role' %}
+
+      <div class="card job-card" id="job-{{ job.id }}">
+        <div class="job-header">
+          <div class="job-info">
+            <h3 class="job-title">{{ job.title }}</h3>
+            <p class="job-company">{{ job.company }} {% if job.location %}· {{ job.location }}{% endif %}</p>
+            {% if job.salary_range %}<p class="salary">💰 {{ job.salary_range }}</p>{% endif %}
+          </div>
+          <div class="fit-score-wrap">
+            <div class="fit-score" style="--score-color: {{ color }}">
+              <span class="score-num">{{ score }}%</span>
+              <span class="score-label">{{ label }}</span>
+            </div>
+            <div class="score-bar">
+              <div class="score-fill" style="width: {{ score }}%; background: {{ color }};"></div>
+            </div>
+          </div>
+        </div>
+
+        {% if job.description %}
+        <p class="job-desc">{{ job.description[:300] }}{% if job.description|length > 300 %}...{% endif %}</p>
+        {% endif %}
+
+        <div class="analysis-grid">
+          {% if match.match_reasons %}
+          <div class="analysis-col">
+            <h4>✅ Why You Match</h4>
+            <ul>{% for r in match.match_reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
+          {% if match.gap_reasons %}
+          <div class="analysis-col">
+            <h4>⚠️ Gaps to Address</h4>
+            <ul>{% for g in match.gap_reasons %}<li>{{ g }}</li>{% endfor %}</ul>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if match.recommendation %}
+        <div class="recommendation">
+          <strong>AI Recommendation:</strong> {{ match.recommendation }}
+        </div>
+        {% endif %}
+
+        {% if match.application_tips %}
+        <details class="tips-details">
+          <summary>Application Tips ({{ match.application_tips|length }})</summary>
+          <ul class="tips-list">
+            {% for tip in match.application_tips %}
+            <li>{{ tip }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+
+        <div class="job-actions">
+          {% if job.apply_url %}
+          <a href="{{ job.apply_url }}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">
+            Apply Now →
+          </a>
+          {% endif %}
+          <span class="source-badge">{{ job.source }}</span>
+
+          <!-- Feedback -->
+          <div class="feedback-row" id="feedback-{{ job.id }}">
+            {% if job.id in feedback_by_job %}
+            <span class="feedback-saved">✓ Rated: {{ feedback_by_job[job.id] }}</span>
+            {% else %}
+            <span class="feedback-label">Rate this match:</span>
+            <button class="fb-btn" onclick="submitFeedback('{{ job.id }}','{{ job.title|replace("'","") }}','{{ job.company|replace("'","") }}',{{ score }},'very_relevant')">🌟 Perfect</button>
+            <button class="fb-btn" onclick="submitFeedback('{{ job.id }}','{{ job.title|replace("'","") }}','{{ job.company|replace("'","") }}',{{ score }},'relevant')">👍 Good</button>
+            <button class="fb-btn" onclick="submitFeedback('{{ job.id }}','{{ job.title|replace("'","") }}','{{ job.company|replace("'","") }}',{{ score }},'somewhat_relevant')">🤔 Maybe</button>
+            <button class="fb-btn" onclick="submitFeedback('{{ job.id }}','{{ job.title|replace("'","") }}','{{ job.company|replace("'","") }}',{{ score }},'not_relevant')">👎 No</button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Evaluation Modal -->
+    <div class="modal hidden" id="eval-modal">
+      <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <h2>AI Evaluation Report</h2>
+        <div id="eval-content">
+          <p class="loading-msg">Running evaluation with Claude AI...</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-overlay hidden" id="modal-overlay" onclick="closeModal()"></div>
+
+    <footer>
+      <p>Powered by <strong>Claude AI</strong> (Anthropic)</p>
+    </footer>
+  </div>
+
+  <script>
+    const SESSION_ID = '{{ session_id }}';
+
+    async function submitFeedback(jobId, jobTitle, company, predictedFit, rating) {
+      const fd = new FormData();
+      fd.append('session_id', SESSION_ID);
+      fd.append('job_id', jobId);
+      fd.append('job_title', jobTitle);
+      fd.append('company', company);
+      fd.append('rating', rating);
+      fd.append('predicted_fit', predictedFit);
+
+      try {
+        const res = await fetch('/feedback', { method: 'POST', body: fd });
+        if (res.ok) {
+          const el = document.getElementById('feedback-' + jobId);
+          const ratingLabels = {
+            very_relevant: '🌟 Perfect',
+            relevant: '👍 Good',
+            somewhat_relevant: '🤔 Maybe',
+            not_relevant: '👎 No',
+          };
+          el.innerHTML = `<span class="feedback-saved">✓ Rated: ${ratingLabels[rating]}</span>`;
+        }
+      } catch (err) {
+        console.error('Feedback error:', err);
+      }
+    }
+
+    async function runEvaluation() {
+      document.getElementById('eval-modal').classList.remove('hidden');
+      document.getElementById('modal-overlay').classList.remove('hidden');
+      document.getElementById('eval-content').innerHTML = '<p class="loading-msg">Running evaluation with Claude AI...</p>';
+
+      try {
+        const res = await fetch('/evaluate/' + SESSION_ID);
+        const data = await res.json();
+
+        if (data.error) {
+          document.getElementById('eval-content').innerHTML = `<p class="error-msg">${data.error}</p><p>${data.tip || ''}</p>`;
+          return;
+        }
+
+        const ev = data.evaluation;
+        const qualityColor = {excellent:'#22c55e',good:'#84cc16',fair:'#f59e0b',poor:'#ef4444',unknown:'#6b7280'};
+        const color = qualityColor[ev.overall_quality] || '#6b7280';
+
+        document.getElementById('eval-content').innerHTML = `
+          <div class="eval-score" style="color:${color}">
+            ${ev.overall_quality?.toUpperCase() || 'UNKNOWN'}
+          </div>
+          <div class="eval-grid">
+            <div class="eval-stat"><span>${ev.precision_score?.toFixed(1) || 0}%</span><label>Precision</label></div>
+            <div class="eval-stat"><span>${ev.avg_predicted_fit?.toFixed(1) || 0}%</span><label>Avg Predicted Fit</label></div>
+            <div class="eval-stat"><span>${ev.calibration_error?.toFixed(1) || 0}</span><label>Calibration Error</label></div>
+            <div class="eval-stat"><span>${ev.total_feedback_count || 0}</span><label>Jobs Rated</label></div>
+          </div>
+          <p><strong>Calibration:</strong> ${ev.calibration_assessment || ''}</p>
+          ${ev.patterns_found?.length ? `<h4>Patterns Found</h4><ul>${ev.patterns_found.map(p=>`<li>${p}</li>`).join('')}</ul>` : ''}
+          ${ev.improvement_suggestions?.length ? `<h4>Improvement Suggestions</h4><ul>${ev.improvement_suggestions.map(s=>`<li>${s}</li>`).join('')}</ul>` : ''}
+          <p><strong>Summary:</strong> ${ev.summary || ''}</p>
+          <details><summary>Full Text Report</summary><pre class="report-pre">${data.report}</pre></details>
+        `;
+      } catch (err) {
+        document.getElementById('eval-content').innerHTML = `<p class="error-msg">Error: ${err.message}</p>`;
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('eval-modal').classList.add('hidden');
+      document.getElementById('modal-overlay').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
