@@ -132,7 +132,7 @@ def analyze(resume_path, location, max_results, remote, keywords, min_fit):
             console.print(f"   [green]✓[/green] {match.match_reasons[0]}")
         if match.gap_reasons:
             console.print(f"   [yellow]⚠[/yellow] {match.gap_reasons[0]}")
-        if match.apply_url:
+        if match.job.apply_url:
             console.print(f"   🔗 {match.job.apply_url}")
         console.print()
 

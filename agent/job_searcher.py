@@ -246,7 +246,7 @@ def _generate_demo_jobs(profile: ResumeProfile) -> List[JobListing]:
         jobs.append(
             JobListing(
                 id=str(uuid.uuid4()),
-                title=f"{role}" if i == 0 else f"Senior {role}" if i % 2 == 0 else f"Lead {role}",
+                title=f"{role}" if i == 0 else f"Lead {role}" if i == 1 else f"Senior {role}" if i == 2 else f"Staff {role}" if i == 3 else f"Principal {role}",
                 company=company,
                 location=location if i % 2 == 0 else "Remote",
                 description=(
