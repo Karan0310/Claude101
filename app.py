@@ -57,7 +57,7 @@ async def startup():
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/results/{session_id}", response_class=HTMLResponse)
@@ -73,9 +73,9 @@ async def results_page(request: Request, session_id: str, db: AsyncSession = Dep
     feedback_by_job = {f.job_id: f.rating for f in feedback_records}
 
     return templates.TemplateResponse(
+        request,
         "results.html",
         {
-            "request": request,
             "session_id": session_id,
             "profile": profile,
             "matches": matches,
