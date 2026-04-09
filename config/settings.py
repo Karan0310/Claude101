@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 from typing import Optional
 import os
+import sys
 
 
 class Settings(BaseSettings):
@@ -36,5 +37,15 @@ class Settings(BaseSettings):
         os.makedirs(self.upload_dir, exist_ok=True)
 
 
-settings = Settings()
-settings.ensure_upload_dir()
+try:
+    settings = Settings()
+    settings.ensure_upload_dir()
+except Exception:
+    print(
+        "\n❌  Missing ANTHROPIC_API_KEY\n\n"
+        "Create a .env file in the project root with:\n\n"
+        "    ANTHROPIC_API_KEY=your_key_here\n\n"
+        "Get your key at: https://console.anthropic.com\n"
+        "Or copy .env.example to .env and fill in the key.\n"
+    )
+    sys.exit(1)
