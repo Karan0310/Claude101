@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resume-Job Matcher Agent</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Resume-Job Matcher Agent</h1>
+      <p class="subtitle">Upload your resume — Claude AI will analyze it and find the best-fit jobs for you.</p>
+    </header>
+
+    <main>
+      <div class="card upload-card">
+        <h2>Upload Your Resume</h2>
+        <form id="upload-form" enctype="multipart/form-data">
+          <div class="form-group file-drop-zone" id="drop-zone">
+            <input type="file" id="resume" name="resume" accept=".pdf,.docx,.doc,.txt" required hidden />
+            <div class="drop-label" id="drop-label">
+              <span class="icon">📄</span>
+              <p>Drag & drop your resume here or <span class="link">browse</span></p>
+              <small>PDF, DOCX, DOC, TXT — max 10MB</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="location">Preferred Location</label>
+              <input type="text" id="location" name="location" placeholder="e.g. New York, Remote" />
+            </div>
+            <div class="form-group">
+              <label for="max_results">Number of Jobs</label>
+              <select id="max_results" name="max_results">
+                <option value="5">5 jobs</option>
+                <option value="10" selected>10 jobs</option>
+                <option value="15">15 jobs</option>
+                <option value="20">20 jobs</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="additional_keywords">Extra Keywords (optional)</label>
+            <input type="text" id="additional_keywords" name="additional_keywords"
+                   placeholder="e.g. React, startup, fintech" />
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="remote_ok" name="remote_ok" value="true" checked />
+              Include remote jobs
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="submit-btn">
+            Analyze &amp; Find Jobs
+          </button>
+        </form>
+      </div>
+
+      <div class="card progress-card hidden" id="progress-card">
+        <h2>Processing...</h2>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <p id="progress-msg">Uploading resume...</p>
+        <div class="steps">
+          <div class="step" id="step-parse">📄 Parsing resume with Claude AI</div>
+          <div class="step" id="step-search">🔍 Searching job boards</div>
+          <div class="step" id="step-score">🎯 Calculating fit percentages</div>
+          <div class="step" id="step-done">✅ Done!</div>
+        </div>
+      </div>
+
+      <div class="how-it-works">
+        <h2>How It Works</h2>
+        <div class="steps-grid">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <h3>Upload Resume</h3>
+            <p>Upload your PDF or DOCX resume. Claude AI reads and extracts your skills, experience, and career profile.</p>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <h3>AI Job Search</h3>
+            <p>The agent searches Google Jobs, LinkedIn, and Indeed for roles that match your profile using targeted queries.</p>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <h3>Fit Score</h3>
+            <p>Each job gets a fit percentage (0-100%) with match reasons, skill gaps, and personalized application tips.</p>
+          </div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <h3>Feedback Loop</h3>
+            <p>Rate the recommendations. The AI evaluates its own precision and gives you insights to improve future searches.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>Powered by <strong>Claude AI</strong> (Anthropic) · Built with FastAPI</p>
+    </footer>
+  </div>
+
+  <script>
+    const form = document.getElementById('upload-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const progressCard = document.getElementById('progress-card');
+    const progressBar = document.getElementById('progress-bar');
+    const progressMsg = document.getElementById('progress-msg');
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('resume');
+    const dropLabel = document.getElementById('drop-label');
+
+    // File drag-and-drop
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) { fileInput.files = e.dataTransfer.files; updateDropLabel(file.name); }
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) updateDropLabel(fileInput.files[0].name);
+    });
+    function updateDropLabel(name) {
+      dropLabel.innerHTML = `<span class="icon">✅</span><p><strong>${name}</strong></p><small>Click to change</small>`;
+    }
+
+    const steps = ['step-parse', 'step-search', 'step-score', 'step-done'];
+    const msgs = [
+      'Parsing resume with Claude AI...',
+      'Searching Google Jobs, LinkedIn, Indeed...',
+      'Calculating fit percentages for each job...',
+      'Redirecting to results...',
+    ];
+    const pcts = [20, 50, 85, 100];
+
+    function activateStep(i) {
+      steps.forEach((id, idx) => {
+        document.getElementById(id).classList.toggle('active', idx === i);
+        document.getElementById(id).classList.toggle('done', idx < i);
+      });
+      progressBar.style.width = pcts[i] + '%';
+      progressMsg.textContent = msgs[i];
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!fileInput.files[0]) { alert('Please select a resume file.'); return; }
+
+      submitBtn.disabled = true;
+      progressCard.classList.remove('hidden');
+      activateStep(0);
+
+      const formData = new FormData(form);
+      // Fix checkbox value
+      formData.set('remote_ok', document.getElementById('remote_ok').checked);
+
+      // Simulate step progression while waiting
+      let stepIdx = 0;
+      const stepTimer = setInterval(() => {
+        stepIdx = Math.min(stepIdx + 1, 2);
+        activateStep(stepIdx);
+      }, 8000);
+
+      try {
+        const res = await fetch('/analyze', { method: 'POST', body: formData });
+        clearInterval(stepTimer);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Unknown error');
+        }
+        const data = await res.json();
+        activateStep(3);
+        setTimeout(() => { window.location.href = data.redirect_url; }, 1000);
+      } catch (err) {
+        clearInterval(stepTimer);
+        progressMsg.textContent = `Error: ${err.message}`;
+        progressBar.style.background = '#ef4444';
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
