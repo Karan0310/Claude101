@@ -56,7 +56,12 @@ class EvaluationRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-engine = create_async_engine(settings.database_url, echo=settings.debug)
+# Ensure the URL uses the async aiosqlite driver regardless of what's in .env
+_db_url = settings.database_url
+if _db_url.startswith("sqlite:///") and "+aiosqlite" not in _db_url:
+    _db_url = _db_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+
+engine = create_async_engine(_db_url, echo=settings.debug)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
